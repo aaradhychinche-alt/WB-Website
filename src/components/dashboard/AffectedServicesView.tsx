@@ -1,6 +1,8 @@
 import React, { useState } from 'react'
 import {
+  AlertTriangle,
   ArrowRight,
+  CheckCircle2,
   ChevronRight,
   Database,
   Search,
@@ -181,26 +183,47 @@ export const AffectedServicesView: React.FC<AffectedServicesViewProps> = ({
           suggestedAction: 'Verify client reconnect backoff policy.'
         }
       ]
-    } else {
-      // envoy-minor
+    } else if (selectedScenarioKey === 'ingress-patch') {
       return [
         {
           id: 'api-gateway',
           name: 'API Gateway',
-          runtime: 'Envoy Proxy',
-          version: '1.27.4',
+          runtime: 'Envoy',
+          version: '1.28.2',
           relation: 'Direct dependency',
           risk: 'LOW',
-          impactCategory: 'HTTP/2 header sanitize',
+          impactCategory: 'Ingress Controller Routing',
           status: 'Low impact',
-          targetDependency: 'Envoy 1.28',
+          targetDependency: 'Ingress NGINX 1.13',
           potentialFailure:
-            'Stricter HTTP/2 pseudo-header validation might drop malformed custom debug headers.',
-          configuration: 'envoy-bootstrap.yaml',
+            'Annotation schema and TLS termination verification; backward compatible with active routing rules.',
+          configuration: 'k8s/ingress.yaml',
           traffic: '12,400 requests/sec',
-          relatedResources: ['Auth Service', 'User Service', 'Billing Service'],
+          relatedResources: ['Ingress NGINX', 'API Gateway'],
           endpoints: ['/*'],
-          suggestedAction: 'Ensure downstream clients emit normalized lowercase headers.'
+          suggestedAction: 'Verify ingress controller readiness probe during standard rolling reload.'
+        }
+      ]
+    } else {
+      // envoy-minor (API Gateway)
+      return [
+        {
+          id: 'auth-service',
+          name: 'Auth Service',
+          runtime: 'Node.js',
+          version: 'v2.14.0',
+          relation: 'Direct dependency',
+          risk: 'LOW',
+          impactCategory: 'ext_authz Filter',
+          status: 'Low impact',
+          targetDependency: 'API Gateway (Envoy 1.28)',
+          potentialFailure:
+            'Minor protobuf header normalization; verified backward compatible with zero routing disruption.',
+          configuration: 'ext_authz in envoy-gateway.yaml',
+          traffic: '2,100 requests/sec',
+          relatedResources: ['API Gateway', 'Auth Service'],
+          endpoints: ['/ext-auth/*'],
+          suggestedAction: 'Deploy 1 canary replica to verify header preservation before full cluster rollout.'
         }
       ]
     }
@@ -551,9 +574,29 @@ export const AffectedServicesView: React.FC<AffectedServicesViewProps> = ({
               <div className="drawer-field">
                 <div className="drawer-label mono">POTENTIAL FAILURE MODE</div>
                 <div className="failure-mode-box panel">
-                  <div className="flex items-center gap-1.5 text-risk mono text-xs font-semibold">
-                    <ShieldAlert size={13} />
-                    <span>Cascading Failure Risk</span>
+                  <div
+                    className={`flex items-center gap-1.5 mono text-xs font-semibold ${
+                      inspectedService.risk === 'HIGH'
+                        ? 'text-risk'
+                        : inspectedService.risk === 'MEDIUM'
+                        ? 'text-warning'
+                        : 'text-healthy'
+                    }`}
+                  >
+                    {inspectedService.risk === 'HIGH' ? (
+                      <ShieldAlert size={13} />
+                    ) : inspectedService.risk === 'MEDIUM' ? (
+                      <AlertTriangle size={13} />
+                    ) : (
+                      <CheckCircle2 size={13} />
+                    )}
+                    <span>
+                      {inspectedService.risk === 'HIGH'
+                        ? 'High Impact Failure Risk'
+                        : inspectedService.risk === 'MEDIUM'
+                        ? 'Operational Degradation Risk'
+                        : 'Contained Impact Mode'}
+                    </span>
                   </div>
                   <p className="failure-desc-text">
                     {inspectedService.potentialFailure}

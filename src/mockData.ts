@@ -1,4 +1,4 @@
-import { ChangeScenario, InfraNode, InfraEdge } from './types'
+import { ChangeScenario, InfraNode, InfraEdge, ScenarioRiskFactors } from './types'
 
 export const HERO_NODES: InfraNode[] = [
   {
@@ -265,7 +265,16 @@ export const SCENARIOS: Record<string, ChangeScenario> = {
         codeSnippet: 'terraform plan -target=aws_rds_cluster.primary -out=tfplan',
         status: 'RECOMMENDED'
       }
-    ]
+    ],
+    whyRiskExplanation:
+      'This change affects 3 services (Auth Service, Billing Service, Worker Service) with 2 blocking configuration conflicts and 1 high-risk dependency path across an extensive 7-dependency footprint. The proposed database upgrade enforces SCRAM-SHA-256 authentication and strict connection pooling timeouts that legacy client drivers cannot negotiate. Because unpatched callers face immediate authentication rejection and connection starvation across critical transactional paths, this multi-tier blast radius justifies the HIGH RISK classification.',
+    riskFactors: {
+      affectedServicesText: '3 services impacted (Auth, Billing, Worker)',
+      conflictsText: '2 blocking configuration conflicts detected',
+      pathsText: '1 critical high-risk path (Auth DB connection)',
+      footprintText: 'Extensive footprint (7 total dependencies)',
+      justificationText: 'Breaking authentication and pool timeout mismatches across critical transactional tiers'
+    }
   },
   'redis-6-7': {
     id: 'redis-6-7',
@@ -334,7 +343,16 @@ export const SCENARIOS: Record<string, ChangeScenario> = {
         codeSnippet: 'redis-cli sentinel set mymaster failover-timeout 30000',
         status: 'RECOMMENDED'
       }
-    ]
+    ],
+    whyRiskExplanation:
+      'This change affects 2 services (Auth Service, API Gateway) with 1 configuration conflict in Redis ACL permissions, but 0 high-risk dependency paths across a moderate 4-dependency footprint. While the RESP3 protocol negotiation upgrade requires client library adjustments to avoid token cache misses, session lookups safely fall back to the primary database with minimal query latency overhead (+45ms). Because the blast radius is bounded and does not disrupt core connectivity, this combination justifies the MEDIUM RISK classification.',
+    riskFactors: {
+      affectedServicesText: '2 services affected (Auth Service, API Gateway)',
+      conflictsText: '1 configuration conflict (Redis ACL syntax)',
+      pathsText: '0 high-risk dependency paths',
+      footprintText: 'Moderate footprint (4 total dependencies)',
+      justificationText: 'Bounded operational degradation with active fallback cache mechanisms'
+    }
   },
   'envoy-minor': {
     id: 'envoy-minor',
@@ -346,7 +364,7 @@ export const SCENARIOS: Record<string, ChangeScenario> = {
       affectedServices: 1,
       configConflicts: 0,
       highRiskPaths: 0,
-      totalDependencies: 9
+      totalDependencies: 1
     },
     affectedServices: [
       {
@@ -356,7 +374,7 @@ export const SCENARIOS: Record<string, ChangeScenario> = {
         dependencyType: 'Direct dependency',
         component: 'ext_authz filter',
         impactReason: 'Minor protobuf header normalization; backward compatible.',
-        failureMode: 'None detected in automated synthetic traffic test.',
+        failureMode: 'Contained edge verification; zero breaking changes observed in synthetic traffic test.',
         affectedEndpoints: ['/ext-auth/*'],
         dependentCallers: 2100
       }
@@ -365,13 +383,174 @@ export const SCENARIOS: Record<string, ChangeScenario> = {
     recommendations: [
       {
         step: '01',
-        title: 'Rolling restart with canary canary pod',
+        title: 'Rolling restart with canary pod',
         description: 'Deploy 1 canary replica to verify header preservation before full cluster rollout.',
         action: 'kubectl rollout restart deployment/envoy-gateway -n ingress',
         codeSnippet: 'kubectl rollout status deployment/envoy-gateway -n ingress',
         status: 'RECOMMENDED'
       }
-    ]
+    ],
+    whyRiskExplanation:
+      'This change affects 1 service (Auth Service) with 0 configuration conflicts and 0 high-risk dependency paths across a limited dependency footprint of 1 downstream link. The proposed Envoy proxy update introduces backward-compatible header handling without altering request routing contracts. With zero breaking conflicts and no upstream propagating paths, this represents a contained, testable change that can be safely verified with a canary rollout, fully justifying the LOW RISK classification.',
+    riskFactors: {
+      affectedServicesText: '1 service evaluated (Auth Service)',
+      conflictsText: '0 configuration conflicts detected',
+      pathsText: '0 high-risk dependency paths',
+      footprintText: 'Limited footprint (1 downstream integration)',
+      justificationText: 'Contained, testable change with fully backward-compatible protocols'
+    }
+  },
+  'ingress-patch': {
+    id: 'ingress-patch',
+    resource: 'Ingress NGINX',
+    currentVersion: '1.12.0',
+    proposedVersion: '1.13.0',
+    riskLevel: 'LOW RISK',
+    summary: {
+      affectedServices: 1,
+      configConflicts: 0,
+      highRiskPaths: 0,
+      totalDependencies: 2
+    },
+    affectedServices: [
+      {
+        id: 'api-gateway',
+        name: 'API Gateway',
+        risk: 'LOW',
+        dependencyType: 'Direct dependency',
+        component: 'Ingress controller routing',
+        impactReason: 'Annotation schema and TLS termination verification; backward compatible.',
+        failureMode: 'None detected; standard rolling reload candidate.',
+        affectedEndpoints: ['/*'],
+        dependentCallers: 12400
+      }
+    ],
+    configConflicts: [],
+    recommendations: [
+      {
+        step: '01',
+        title: 'Rolling restart with pod readiness check',
+        description: 'Execute rolling upgrade on ingress-nginx daemonset and inspect ingress controller readiness probes.',
+        action: 'kubectl rollout restart daemonset/ingress-nginx -n ingress-nginx',
+        codeSnippet: 'kubectl rollout status daemonset/ingress-nginx -n ingress-nginx',
+        status: 'RECOMMENDED'
+      }
+    ],
+    whyRiskExplanation:
+      'This change affects 1 service (API Gateway) with 0 configuration conflicts and 0 high-risk dependency paths across a narrow 2-dependency footprint. The minor ingress controller patch preserves all ingress annotations, TLS termination parameters, and routing paths. Because the modification is strictly localized and introduces no protocol or credential alterations, it represents a contained, testable change that justifies the LOW RISK classification.',
+    riskFactors: {
+      affectedServicesText: '1 service evaluated (API Gateway)',
+      conflictsText: '0 configuration conflicts detected',
+      pathsText: '0 high-risk dependency paths',
+      footprintText: 'Narrow footprint (2 total dependencies)',
+      justificationText: 'Contained, testable change with verified backward-compatible ingress rules'
+    }
+  }
+}
+
+/**
+ * Dynamically derives a scenario risk explanation based on actual scenario data.
+ * Answers all 5 required questions:
+ * 1. How many services are affected?
+ * 2. Are there configuration conflicts?
+ * 3. Are there high-risk dependency paths?
+ * 4. How large is the dependency footprint?
+ * 5. Why does that combination justify HIGH / MEDIUM / LOW?
+ *
+ * Strict safety rule: NEVER uses phrases such as:
+ * - cascading failure
+ * - immediate cascading timeouts
+ * - critical incompatibility
+ * - widespread outage
+ * - breaking downstream services
+ * inside a LOW RISK explanation.
+ */
+export function generateScenarioRiskExplanation(scenario: ChangeScenario): string {
+  if (scenario.whyRiskExplanation) {
+    return scenario.whyRiskExplanation
+  }
+
+  const affectedCount = scenario.summary.affectedServices
+  const conflictsCount = scenario.summary.configConflicts
+  const highRiskPathsCount = scenario.summary.highRiskPaths
+  const footprintCount = scenario.summary.totalDependencies
+  const risk = scenario.riskLevel.toUpperCase()
+
+  const serviceNames = scenario.affectedServices.map((s) => s.name).slice(0, 3).join(', ')
+  const servicesPart =
+    affectedCount === 0
+      ? '0 services are affected'
+      : affectedCount === 1
+      ? `1 service is affected${serviceNames ? ` (${serviceNames})` : ''}`
+      : `${affectedCount} services are affected${serviceNames ? ` (${serviceNames}${scenario.affectedServices.length > 3 ? ', etc.' : ''})` : ''}`
+
+  const conflictsPart =
+    conflictsCount === 0
+      ? '0 configuration conflicts'
+      : conflictsCount === 1
+      ? '1 configuration conflict'
+      : `${conflictsCount} configuration conflicts`
+
+  const pathsPart =
+    highRiskPathsCount === 0
+      ? '0 high-risk dependency paths'
+      : highRiskPathsCount === 1
+      ? '1 high-risk dependency path'
+      : `${highRiskPathsCount} high-risk dependency paths`
+
+  const footprintPart =
+    footprintCount <= 2
+      ? `a limited dependency footprint of ${footprintCount} total ${footprintCount === 1 ? 'dependency' : 'dependencies'}`
+      : footprintCount <= 5
+      ? `a moderate dependency footprint of ${footprintCount} total dependencies`
+      : `a broad dependency footprint of ${footprintCount} total dependencies`
+
+  if (risk.includes('LOW')) {
+    return `This change affects ${servicesPart} with ${conflictsPart} and ${pathsPart} across ${footprintPart}. Because there are no breaking configuration conflicts and the scope is strictly isolated, this upgrade represents a contained, testable change that can be safely verified via canary deployment without impacting downstream services, fully justifying the LOW RISK classification.`
+  }
+
+  if (risk.includes('MEDIUM')) {
+    return `This change affects ${servicesPart} with ${conflictsPart} and ${pathsPart} across ${footprintPart}. While configuration or protocol adjustments are required for dependent components, operational degradation is bounded by active fallback mechanisms. This moderate blast radius warrants pre-release staging validation, justifying the MEDIUM RISK classification.`
+  }
+
+  return `This change affects ${servicesPart} with ${conflictsPart} and ${pathsPart} across ${footprintPart}. Critical protocol or credential mismatches prevent normal service communication along primary operational paths. This combination of breaking dependencies and wide blast radius requires pre-deployment remediation, justifying the HIGH RISK classification.`
+}
+
+export function getScenarioRiskFactors(scenario: ChangeScenario): ScenarioRiskFactors {
+  if (scenario.riskFactors) {
+    return scenario.riskFactors
+  }
+
+  const affectedCount = scenario.summary.affectedServices
+  const conflictsCount = scenario.summary.configConflicts
+  const highRiskPathsCount = scenario.summary.highRiskPaths
+  const footprintCount = scenario.summary.totalDependencies
+  const risk = scenario.riskLevel.toUpperCase()
+
+  return {
+    affectedServicesText:
+      affectedCount === 1
+        ? `1 service affected (${scenario.affectedServices[0]?.name || 'Direct dependency'})`
+        : `${affectedCount} services affected`,
+    conflictsText:
+      conflictsCount === 0
+        ? '0 configuration conflicts detected'
+        : `${conflictsCount} configuration ${conflictsCount === 1 ? 'conflict' : 'conflicts'} detected`,
+    pathsText:
+      highRiskPathsCount === 0
+        ? '0 high-risk dependency paths'
+        : `${highRiskPathsCount} high-risk dependency ${highRiskPathsCount === 1 ? 'path' : 'paths'}`,
+    footprintText:
+      footprintCount <= 2
+        ? `Limited footprint (${footprintCount} ${footprintCount === 1 ? 'dependency' : 'dependencies'})`
+        : footprintCount <= 5
+        ? `Moderate footprint (${footprintCount} dependencies)`
+        : `Extensive footprint (${footprintCount} dependencies)`,
+    justificationText: risk.includes('LOW')
+      ? 'Contained, testable change with fully backward-compatible protocols'
+      : risk.includes('MEDIUM')
+      ? 'Bounded operational impact with graceful fallback mechanisms'
+      : 'Breaking protocol mismatches across critical operational tiers'
   }
 }
 

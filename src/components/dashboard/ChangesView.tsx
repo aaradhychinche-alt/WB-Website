@@ -12,7 +12,11 @@ import {
   ShieldAlert,
   Zap
 } from 'lucide-react'
-import { SCENARIOS } from '../../mockData'
+import {
+  SCENARIOS,
+  generateScenarioRiskExplanation,
+  getScenarioRiskFactors
+} from '../../mockData'
 
 interface ChangesViewProps {
   selectedScenarioKey: string
@@ -63,7 +67,7 @@ export const ChangesView: React.FC<ChangesViewProps> = ({
       risk: 'MEDIUM',
       badgeClass: 'badge-warning',
       dotClass: 'dot-warning',
-      affected: '4 services · 1 conflict',
+      affected: '2 services · 1 conflict',
       created: '14 min ago',
       pr: 'PR #409'
     },
@@ -75,7 +79,7 @@ export const ChangesView: React.FC<ChangesViewProps> = ({
       risk: 'LOW',
       badgeClass: 'badge-healthy',
       dotClass: 'dot-healthy',
-      affected: '0 critical paths',
+      affected: '1 service · 0 conflicts',
       created: '1 hr ago',
       pr: 'PR #406'
     },
@@ -83,11 +87,11 @@ export const ChangesView: React.FC<ChangesViewProps> = ({
       id: 'ingress-patch',
       name: 'Ingress NGINX 1.12 → 1.13',
       resource: 'k8s/networking.k8s.io',
-      status: 'Pending',
+      status: 'Analyzed',
       risk: 'LOW',
       badgeClass: 'badge-healthy',
       dotClass: 'dot-healthy',
-      affected: '1 service',
+      affected: '1 service · 0 conflicts',
       created: '3 hrs ago',
       pr: 'PR #401'
     }
@@ -312,34 +316,294 @@ export const ChangesView: React.FC<ChangesViewProps> = ({
               </div>
             </div>
 
-            <div className="why-risk-card panel" style={{ padding: '16px 20px', marginBottom: '20px' }}>
-              <div className="flex items-center gap-2 font-semibold text-white text-sm" style={{ marginBottom: 6 }}>
-                <ShieldAlert size={16} className="text-risk" />
-                <span>WHY THIS IS {scenario.riskLevel}</span>
+            {/* Dynamic Risk Explanation Derived from Actual Scenario Data */}
+            <div
+              className="why-risk-card panel"
+              style={{
+                padding: '18px 20px',
+                marginBottom: '20px',
+                borderLeft: `4px solid ${
+                  scenario.riskLevel.includes('HIGH')
+                    ? 'var(--status-risk)'
+                    : scenario.riskLevel.includes('MEDIUM')
+                    ? 'var(--status-warning)'
+                    : 'var(--status-healthy)'
+                }`
+              }}
+            >
+              <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
+                <div className="flex items-center gap-2 font-semibold text-white text-sm">
+                  {scenario.riskLevel.includes('HIGH') ? (
+                    <ShieldAlert size={16} className="text-risk" />
+                  ) : scenario.riskLevel.includes('MEDIUM') ? (
+                    <AlertTriangle size={16} className="text-warning" />
+                  ) : (
+                    <CheckCircle2 size={16} className="text-healthy" />
+                  )}
+                  <span>WHY THIS IS {scenario.riskLevel}</span>
+                </div>
+                <span
+                  className={`badge mono text-xs ${
+                    scenario.riskLevel.includes('HIGH')
+                      ? 'badge-risk'
+                      : scenario.riskLevel.includes('MEDIUM')
+                      ? 'badge-warning'
+                      : 'badge-healthy'
+                  }`}
+                  style={{ fontSize: '10px' }}
+                >
+                  {scenario.riskLevel.includes('HIGH')
+                    ? 'BREAKING PROTOCOL RISK'
+                    : scenario.riskLevel.includes('MEDIUM')
+                    ? 'BOUNDED DEGRADATION'
+                    : 'CONTAINED & TESTABLE'}
+                </span>
               </div>
-              <p className="text-secondary text-xs" style={{ lineHeight: 1.5 }}>
-                The proposed {scenario.resource} upgrade affects multiple services through direct database connections and introduces configuration compatibility concerns. Legacy client drivers lack support for modern handshake protocols, causing immediate cascading timeouts across upstream callers.
+
+              {/* 4 Quantitative Scenario Evaluation Factors */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                  gap: '8px',
+                  marginBottom: '12px',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  padding: '10px 12px',
+                  borderRadius: '4px',
+                  border: '1px solid rgba(255, 255, 255, 0.06)'
+                }}
+              >
+                <div>
+                  <div className="mono text-muted" style={{ fontSize: '10px' }}>1. AFFECTED SERVICES</div>
+                  <div className="font-semibold text-white mono text-xs" style={{ marginTop: '2px' }}>
+                    {scenario.summary.affectedServices} {scenario.summary.affectedServices === 1 ? 'service' : 'services'}
+                  </div>
+                </div>
+                <div>
+                  <div className="mono text-muted" style={{ fontSize: '10px' }}>2. CONFIG CONFLICTS</div>
+                  <div
+                    className={`font-semibold mono text-xs ${
+                      scenario.summary.configConflicts > 0 ? 'text-warning' : 'text-healthy'
+                    }`}
+                    style={{ marginTop: '2px' }}
+                  >
+                    {scenario.summary.configConflicts} detected
+                  </div>
+                </div>
+                <div>
+                  <div className="mono text-muted" style={{ fontSize: '10px' }}>3. HIGH-RISK PATHS</div>
+                  <div
+                    className={`font-semibold mono text-xs ${
+                      scenario.summary.highRiskPaths > 0 ? 'text-risk' : 'text-healthy'
+                    }`}
+                    style={{ marginTop: '2px' }}
+                  >
+                    {scenario.summary.highRiskPaths} critical
+                  </div>
+                </div>
+                <div>
+                  <div className="mono text-muted" style={{ fontSize: '10px' }}>4. DEPENDENCY FOOTPRINT</div>
+                  <div className="font-semibold text-white mono text-xs" style={{ marginTop: '2px' }}>
+                    {scenario.summary.totalDependencies <= 2
+                      ? 'Limited'
+                      : scenario.summary.totalDependencies <= 5
+                      ? 'Moderate'
+                      : 'Extensive'}{' '}
+                    ({scenario.summary.totalDependencies} {scenario.summary.totalDependencies === 1 ? 'dep' : 'deps'})
+                  </div>
+                </div>
+              </div>
+
+              {/* 5. Qualitative Justification Derived from Actual Scenario Factors */}
+              <div
+                style={{
+                  marginBottom: '12px',
+                  padding: '8px 12px',
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  borderRadius: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                <span className="mono text-muted" style={{ fontSize: '10px', letterSpacing: '0.05em' }}>
+                  5. RISK JUSTIFICATION:
+                </span>
+                <span className="mono text-xs font-semibold text-white">
+                  {getScenarioRiskFactors(scenario).justificationText}
+                </span>
+              </div>
+
+              {/* Paragraph derived from actual scenario data */}
+              <p className="text-secondary text-xs" style={{ lineHeight: 1.6, margin: 0 }}>
+                {scenario.whyRiskExplanation || generateScenarioRiskExplanation(scenario)}
               </p>
             </div>
 
             <div className="top-risks-section">
-              <div className="section-title-sm mono" style={{ marginBottom: 10 }}>TOP RISKS IDENTIFIED</div>
+              <div className="section-title-sm mono" style={{ marginBottom: 10 }}>
+                {scenario.riskLevel.includes('LOW')
+                  ? 'KEY VERIFICATION & SAFETY FACTORS'
+                  : 'TOP RISKS IDENTIFIED'}
+              </div>
               <div className="top-risks-grid">
-                <div className="panel risk-summary-card" style={{ padding: '14px', borderLeft: '3px solid var(--status-risk)' }}>
-                  <span className="mono text-xs text-risk font-semibold">HIGH IMPACT</span>
-                  <h4 className="font-semibold text-white text-sm" style={{ margin: '4px 0' }}>Auth Service</h4>
-                  <p className="text-muted text-xs">Database connection incompatibility under SCRAM-SHA-256 handshake.</p>
-                </div>
-                <div className="panel risk-summary-card" style={{ padding: '14px', borderLeft: '3px solid var(--status-risk)' }}>
-                  <span className="mono text-xs text-risk font-semibold">HIGH IMPACT</span>
-                  <h4 className="font-semibold text-white text-sm" style={{ margin: '4px 0' }}>Billing Service</h4>
-                  <p className="text-muted text-xs">Connection pool timeout mismatch under PgBouncer cold initialization.</p>
-                </div>
-                <div className="panel risk-summary-card" style={{ padding: '14px', borderLeft: '3px solid var(--status-warning)' }}>
-                  <span className="mono text-xs text-warning font-semibold">CONFIG CONFLICT</span>
-                  <h4 className="font-semibold text-white text-sm" style={{ margin: '4px 0' }}>Redis Cache</h4>
-                  <p className="text-muted text-xs">Fallback read traffic surge during token verify retry loop.</p>
-                </div>
+                {scenario.id === 'envoy-minor' ? (
+                  <>
+                    <div
+                      className="panel risk-summary-card"
+                      style={{ padding: '14px', borderLeft: '3px solid var(--status-healthy)' }}
+                    >
+                      <span className="mono text-xs text-healthy font-semibold">CONTAINED IMPACT</span>
+                      <h4 className="font-semibold text-white text-sm" style={{ margin: '4px 0' }}>
+                        Auth Service
+                      </h4>
+                      <p className="text-muted text-xs">
+                        ext_authz filter protobuf header normalization; verified backward-compatible with no routing disruption.
+                      </p>
+                    </div>
+                    <div
+                      className="panel risk-summary-card"
+                      style={{ padding: '14px', borderLeft: '3px solid var(--status-healthy)' }}
+                    >
+                      <span className="mono text-xs text-healthy font-semibold">VERIFIED CLEAN</span>
+                      <h4 className="font-semibold text-white text-sm" style={{ margin: '4px 0' }}>
+                        Ingress Route Table
+                      </h4>
+                      <p className="text-muted text-xs">
+                        0 route conflicts, path pattern deprecations, or TLS handshake mismatches across edge listeners.
+                      </p>
+                    </div>
+                    <div
+                      className="panel risk-summary-card"
+                      style={{ padding: '14px', borderLeft: '3px solid var(--status-healthy)' }}
+                    >
+                      <span className="mono text-xs text-healthy font-semibold">CANARY CANDIDATE</span>
+                      <h4 className="font-semibold text-white text-sm" style={{ margin: '4px 0' }}>
+                        Deployment Strategy
+                      </h4>
+                      <p className="text-muted text-xs">
+                        Single canary replica deployment isolates initial traffic validation for a safe, testable rollout.
+                      </p>
+                    </div>
+                  </>
+                ) : scenario.id === 'ingress-patch' ? (
+                  <>
+                    <div
+                      className="panel risk-summary-card"
+                      style={{ padding: '14px', borderLeft: '3px solid var(--status-healthy)' }}
+                    >
+                      <span className="mono text-xs text-healthy font-semibold">CONTAINED IMPACT</span>
+                      <h4 className="font-semibold text-white text-sm" style={{ margin: '4px 0' }}>
+                        API Gateway Ingress
+                      </h4>
+                      <p className="text-muted text-xs">
+                        Ingress annotation schemas, TLS secrets, and upstream routing rules remain backward compatible.
+                      </p>
+                    </div>
+                    <div
+                      className="panel risk-summary-card"
+                      style={{ padding: '14px', borderLeft: '3px solid var(--status-healthy)' }}
+                    >
+                      <span className="mono text-xs text-healthy font-semibold">VERIFIED CLEAN</span>
+                      <h4 className="font-semibold text-white text-sm" style={{ margin: '4px 0' }}>
+                        Cluster Networking
+                      </h4>
+                      <p className="text-muted text-xs">
+                        0 configuration conflicts detected across active Kubernetes ingress manifests.
+                      </p>
+                    </div>
+                    <div
+                      className="panel risk-summary-card"
+                      style={{ padding: '14px', borderLeft: '3px solid var(--status-healthy)' }}
+                    >
+                      <span className="mono text-xs text-healthy font-semibold">TESTABLE ROLLOUT</span>
+                      <h4 className="font-semibold text-white text-sm" style={{ margin: '4px 0' }}>
+                        DaemonSet Readiness
+                      </h4>
+                      <p className="text-muted text-xs">
+                        Standard rolling restart candidate with verified controller health probes.
+                      </p>
+                    </div>
+                  </>
+                ) : scenario.id === 'redis-6-7' ? (
+                  <>
+                    <div
+                      className="panel risk-summary-card"
+                      style={{ padding: '14px', borderLeft: '3px solid var(--status-warning)' }}
+                    >
+                      <span className="mono text-xs text-warning font-semibold">MEDIUM IMPACT</span>
+                      <h4 className="font-semibold text-white text-sm" style={{ margin: '4px 0' }}>
+                        Auth Service
+                      </h4>
+                      <p className="text-muted text-xs">
+                        ioredis session token cache RESP3 protocol negotiation fallback (+45ms query latency to primary DB).
+                      </p>
+                    </div>
+                    <div
+                      className="panel risk-summary-card"
+                      style={{ padding: '14px', borderLeft: '3px solid var(--status-warning)' }}
+                    >
+                      <span className="mono text-xs text-warning font-semibold">CONFIG CONFLICT</span>
+                      <h4 className="font-semibold text-white text-sm" style={{ margin: '4px 0' }}>
+                        Redis ACL Credentials
+                      </h4>
+                      <p className="text-muted text-xs">
+                        Default user permissions require explicit command category grants (+@read +@write).
+                      </p>
+                    </div>
+                    <div
+                      className="panel risk-summary-card"
+                      style={{ padding: '14px', borderLeft: '3px solid var(--status-healthy)' }}
+                    >
+                      <span className="mono text-xs text-healthy font-semibold">LOW IMPACT</span>
+                      <h4 className="font-semibold text-white text-sm" style={{ margin: '4px 0' }}>
+                        API Gateway
+                      </h4>
+                      <p className="text-muted text-xs">
+                        Rate limit filter transient counter bypass for 120s during Redis cluster reboot.
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div
+                      className="panel risk-summary-card"
+                      style={{ padding: '14px', borderLeft: '3px solid var(--status-risk)' }}
+                    >
+                      <span className="mono text-xs text-risk font-semibold">HIGH IMPACT</span>
+                      <h4 className="font-semibold text-white text-sm" style={{ margin: '4px 0' }}>
+                        Auth Service
+                      </h4>
+                      <p className="text-muted text-xs">
+                        Database connection incompatibility under SCRAM-SHA-256 handshake.
+                      </p>
+                    </div>
+                    <div
+                      className="panel risk-summary-card"
+                      style={{ padding: '14px', borderLeft: '3px solid var(--status-risk)' }}
+                    >
+                      <span className="mono text-xs text-risk font-semibold">HIGH IMPACT</span>
+                      <h4 className="font-semibold text-white text-sm" style={{ margin: '4px 0' }}>
+                        Billing Service
+                      </h4>
+                      <p className="text-muted text-xs">
+                        Connection pool timeout mismatch under PgBouncer cold initialization.
+                      </p>
+                    </div>
+                    <div
+                      className="panel risk-summary-card"
+                      style={{ padding: '14px', borderLeft: '3px solid var(--status-warning)' }}
+                    >
+                      <span className="mono text-xs text-warning font-semibold">CONFIG CONFLICT</span>
+                      <h4 className="font-semibold text-white text-sm" style={{ margin: '4px 0' }}>
+                        Redis Cache
+                      </h4>
+                      <p className="text-muted text-xs">
+                        Fallback read traffic surge during token verify retry loop.
+                      </p>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -372,67 +636,131 @@ export const ChangesView: React.FC<ChangesViewProps> = ({
                 <div className="tree-depth-header mono text-muted">DEPTH 0 · ORIGIN OF CHANGE</div>
                 <div className="tree-node-item tree-origin">
                   <Database size={15} />
-                  <strong>{scenario.resource} ({scenario.proposedVersion})</strong>
-                  <span className="badge badge-risk mono" style={{ marginLeft: 'auto' }}>CHANGE ROOT</span>
+                  <strong>
+                    {scenario.resource} ({scenario.proposedVersion})
+                  </strong>
+                  <span
+                    className={`badge ${
+                      scenario.riskLevel.includes('HIGH')
+                        ? 'badge-risk'
+                        : scenario.riskLevel.includes('MEDIUM')
+                        ? 'badge-warning'
+                        : 'badge-healthy'
+                    } mono`}
+                    style={{ marginLeft: 'auto' }}
+                  >
+                    {scenario.riskLevel.includes('HIGH')
+                      ? 'CHANGE ROOT'
+                      : scenario.riskLevel.includes('MEDIUM')
+                      ? 'CHANGE ORIGIN'
+                      : 'CONTAINED ROOT'}
+                  </span>
                 </div>
               </div>
 
               <div className="tree-connector-arrow">↓ Direct Dependencies (Depth 1)</div>
 
               <div className="tree-depth-block">
-                <div className="tree-depth-header mono text-muted">DEPTH 1 · DIRECT CLIENT POOLS</div>
+                <div className="tree-depth-header mono text-muted">DEPTH 1 · DIRECT CLIENT POOLS & LINKS</div>
                 <div className="tree-nodes-list">
-                  <div className="tree-node-item tree-risk">
-                    <Server size={15} />
-                    <div>
-                      <strong>Auth Service</strong>
-                      <span className="node-detail text-muted">pg@8.7.1 · Port 5432 · SCRAM-SHA-256 mismatch</span>
-                    </div>
-                    <span className="badge badge-risk mono" style={{ marginLeft: 'auto' }}>HIGH RISK</span>
-                  </div>
-
-                  <div className="tree-node-item tree-risk">
-                    <Server size={15} />
-                    <div>
-                      <strong>Billing Service</strong>
-                      <span className="node-detail text-muted">pgbouncer · Connection timeout 5000ms &lt; 6200ms</span>
-                    </div>
-                    <span className="badge badge-risk mono" style={{ marginLeft: 'auto' }}>HIGH RISK</span>
-                  </div>
-
-                  <div className="tree-node-item tree-healthy">
-                    <Server size={15} />
-                    <div>
-                      <strong>User Service</strong>
-                      <span className="node-detail text-muted">tokio-postgres · Native SCRAM support verified</span>
-                    </div>
-                    <span className="badge badge-healthy mono" style={{ marginLeft: 'auto' }}>HEALTHY</span>
-                  </div>
+                  {scenario.affectedServices
+                    .filter((s) => s.dependencyType === 'Direct dependency')
+                    .map((svc) => (
+                      <div
+                        key={svc.id}
+                        className={`tree-node-item ${
+                          svc.risk === 'HIGH'
+                            ? 'tree-risk'
+                            : svc.risk === 'MEDIUM'
+                            ? 'tree-warning'
+                            : 'tree-healthy'
+                        }`}
+                      >
+                        <Server size={15} />
+                        <div>
+                          <strong>{svc.name}</strong>
+                          <span className="node-detail text-muted">
+                            {svc.component} · {svc.impactReason}
+                          </span>
+                        </div>
+                        <span
+                          className={`badge ${
+                            svc.risk === 'HIGH'
+                              ? 'badge-risk'
+                              : svc.risk === 'MEDIUM'
+                              ? 'badge-warning'
+                              : 'badge-healthy'
+                          } mono`}
+                          style={{ marginLeft: 'auto' }}
+                        >
+                          {svc.risk} RISK
+                        </span>
+                      </div>
+                    ))}
                 </div>
               </div>
 
-              <div className="tree-connector-arrow">↓ Downstream Propagation (Depth 2 & 3)</div>
+              <div className="tree-connector-arrow">
+                {scenario.affectedServices.some((s) => s.dependencyType === 'Indirect dependency')
+                  ? '↓ Downstream Propagation (Depth 2 & 3)'
+                  : '— Downstream Propagation Terminated'}
+              </div>
 
               <div className="tree-depth-block">
-                <div className="tree-depth-header mono text-muted">DEPTH 2 & 3 · INDIRECT DOWNSTREAM WORKLOADS</div>
+                <div className="tree-depth-header mono text-muted">
+                  DEPTH 2+ · INDIRECT DOWNSTREAM PROPAGATION
+                </div>
                 <div className="tree-nodes-list">
-                  <div className="tree-node-item tree-warning">
-                    <Server size={15} />
-                    <div>
-                      <strong>Redis Cache (via Auth Service)</strong>
-                      <span className="node-detail text-muted">Session key synchronization during DB retry storm</span>
+                  {scenario.affectedServices.filter((s) => s.dependencyType === 'Indirect dependency')
+                    .length === 0 ? (
+                    <div className="tree-node-item tree-healthy">
+                      <CheckCircle2 size={15} className="text-healthy" />
+                      <div>
+                        <strong>No Indirect Downstream Workloads</strong>
+                        <span className="node-detail text-muted">
+                          Change footprint terminates at Depth 1 direct integration; 0 multi-hop cascades detected.
+                        </span>
+                      </div>
+                      <span className="badge badge-healthy mono" style={{ marginLeft: 'auto' }}>
+                        CONTAINED
+                      </span>
                     </div>
-                    <span className="badge badge-warning mono" style={{ marginLeft: 'auto' }}>MEDIUM RISK</span>
-                  </div>
-
-                  <div className="tree-node-item tree-warning">
-                    <Server size={15} />
-                    <div>
-                      <strong>Worker Service (via RabbitMQ)</strong>
-                      <span className="node-detail text-muted">Implicit text-to-timestamp cast deprecation</span>
-                    </div>
-                    <span className="badge badge-warning mono" style={{ marginLeft: 'auto' }}>MEDIUM RISK</span>
-                  </div>
+                  ) : (
+                    scenario.affectedServices
+                      .filter((s) => s.dependencyType === 'Indirect dependency')
+                      .map((svc) => (
+                        <div
+                          key={svc.id}
+                          className={`tree-node-item ${
+                            svc.risk === 'HIGH'
+                              ? 'tree-risk'
+                              : svc.risk === 'MEDIUM'
+                              ? 'tree-warning'
+                              : 'tree-healthy'
+                          }`}
+                        >
+                          <Server size={15} />
+                          <div>
+                            <strong>{svc.name}</strong>
+                            <span className="node-detail text-muted">
+                              {svc.component} · {svc.impactReason}
+                            </span>
+                          </div>
+                          <span
+                            className={`badge ${
+                              svc.risk === 'HIGH'
+                                ? 'badge-risk'
+                                : svc.risk === 'MEDIUM'
+                                ? 'badge-warning'
+                                : 'badge-healthy'
+                            } mono`}
+                            style={{ marginLeft: 'auto' }}
+                          >
+                            {svc.risk} RISK
+                          </span>
+                        </div>
+                      ))
+                  )}
                 </div>
               </div>
             </div>
@@ -503,38 +831,48 @@ export const ChangesView: React.FC<ChangesViewProps> = ({
         {/* Tab 4: Conflicts Diff */}
         {activeTab === 'conflicts' && (
           <div className="change-tab-pane">
-            <div className="conflicts-stack">
-              {scenario.configConflicts.map((conf) => (
-                <div key={conf.id} className="conflict-card-item">
-                  <div className="conflict-card-header">
-                    <div>
-                      <span className={`badge ${conf.severity === 'HIGH' ? 'badge-risk' : 'badge-warning'} mono`}>
-                        {conf.severity} SEVERITY
-                      </span>
-                      <strong style={{ marginLeft: '10px' }}>{conf.title}</strong>
-                    </div>
-                    <span className="mono text-muted" style={{ fontSize: '11px' }}>{conf.resource}</span>
-                  </div>
-
-                  <p className="conflict-card-reason text-secondary">{conf.reason}</p>
-
-                  {conf.diff && (
-                    <div className="conflict-diff-container">
-                      <div className="diff-titlebar mono text-muted">MANIFEST DIFF</div>
-                      <div className="diff-lines mono">
-                        <div className="diff-line diff-del">- {conf.diff.current}</div>
-                        <div className="diff-line diff-add">+ {conf.diff.required}</div>
+            {scenario.configConflicts.length === 0 ? (
+              <div className="panel" style={{ padding: '36px 24px', textAlign: 'center' }}>
+                <CheckCircle2 size={32} className="text-healthy" style={{ margin: '0 auto 12px' }} />
+                <h4 className="font-semibold text-white text-sm">No Configuration Conflicts Detected</h4>
+                <p className="text-secondary text-xs" style={{ maxWidth: '460px', margin: '6px auto 0', lineHeight: 1.5 }}>
+                  All manifest attributes, connection parameters, and client driver specifications are fully compatible with {scenario.resource} {scenario.proposedVersion}. Zero configuration diffs required.
+                </p>
+              </div>
+            ) : (
+              <div className="conflicts-stack">
+                {scenario.configConflicts.map((conf) => (
+                  <div key={conf.id} className="conflict-card-item">
+                    <div className="conflict-card-header">
+                      <div>
+                        <span className={`badge ${conf.severity === 'HIGH' ? 'badge-risk' : 'badge-warning'} mono`}>
+                          {conf.severity} SEVERITY
+                        </span>
+                        <strong style={{ marginLeft: '10px' }}>{conf.title}</strong>
                       </div>
+                      <span className="mono text-muted" style={{ fontSize: '11px' }}>{conf.resource}</span>
                     </div>
-                  )}
 
-                  <div className="conflict-card-remedy">
-                    <span className="mono text-muted">SUGGESTED RESOLUTION:</span>
-                    <p className="text-primary" style={{ fontSize: '13px' }}>{conf.recommendation}</p>
+                    <p className="conflict-card-reason text-secondary">{conf.reason}</p>
+
+                    {conf.diff && (
+                      <div className="conflict-diff-container">
+                        <div className="diff-titlebar mono text-muted">MANIFEST DIFF</div>
+                        <div className="diff-lines mono">
+                          <div className="diff-line diff-del">- {conf.diff.current}</div>
+                          <div className="diff-line diff-add">+ {conf.diff.required}</div>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="conflict-card-remedy">
+                      <span className="mono text-muted">SUGGESTED RESOLUTION:</span>
+                      <p className="text-primary" style={{ fontSize: '13px' }}>{conf.recommendation}</p>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

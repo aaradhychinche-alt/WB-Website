@@ -1,9 +1,11 @@
 import React from 'react'
 import {
+  AlertTriangle,
   ArrowDown,
   ArrowRight,
-  Database,
-  Network
+  CheckCircle2,
+  Network,
+  ShieldAlert
 } from 'lucide-react'
 import { SCENARIOS } from '../../mockData'
 
@@ -103,6 +105,7 @@ export const BlastRadiusView: React.FC<BlastRadiusViewProps> = ({
       {/* Layered Propagation Distance Diagram */}
       <div className="blast-propagation-flow">
         {/* TIER 0: THE SOURCE / ORIGIN */}
+        {/* TIER 0: THE SOURCE / ORIGIN */}
         <div className="blast-tier-block">
           <div className="tier-badge-label mono text-xs">
             <span>TIER 0 · PROPOSED CHANGE ORIGIN</span>
@@ -111,17 +114,39 @@ export const BlastRadiusView: React.FC<BlastRadiusViewProps> = ({
           <div className="source-origin-card panel">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Database size={16} className="text-risk" />
+                {scenario.riskLevel.includes('HIGH') ? (
+                  <ShieldAlert size={16} className="text-risk" />
+                ) : scenario.riskLevel.includes('MEDIUM') ? (
+                  <AlertTriangle size={16} className="text-warning" />
+                ) : (
+                  <CheckCircle2 size={16} className="text-healthy" />
+                )}
                 <h4 className="font-semibold text-white text-sm">
                   {scenario.resource}: {scenario.currentVersion} → {scenario.proposedVersion}
                 </h4>
               </div>
-              <span className="badge badge-risk mono text-xs">
-                SOURCE BREAKER
+              <span
+                className={`badge ${
+                  scenario.riskLevel.includes('HIGH')
+                    ? 'badge-risk'
+                    : scenario.riskLevel.includes('MEDIUM')
+                    ? 'badge-warning'
+                    : 'badge-healthy'
+                } mono text-xs`}
+              >
+                {scenario.riskLevel.includes('HIGH')
+                  ? 'SOURCE BREAKER'
+                  : scenario.riskLevel.includes('MEDIUM')
+                  ? 'MODERATE IMPACT ORIGIN'
+                  : 'CONTAINED ORIGIN'}
               </span>
             </div>
             <p className="text-secondary text-xs" style={{ marginTop: 6 }}>
-              Primary transactional infrastructure upgrade initiating protocol and handshake changes.
+              {scenario.riskLevel.includes('HIGH')
+                ? 'Primary transactional infrastructure upgrade initiating protocol and handshake changes.'
+                : scenario.riskLevel.includes('MEDIUM')
+                ? 'In-memory caching and session layer change with bounded operational degradation.'
+                : 'Edge ingress proxy configuration update with contained blast boundary and backward-compatible protocols.'}
             </p>
           </div>
         </div>
@@ -139,67 +164,32 @@ export const BlastRadiusView: React.FC<BlastRadiusViewProps> = ({
         {/* TIER 1: DIRECT IMPACT */}
         <div className="blast-tier-block">
           <div className="tier-badge-label mono text-xs">
-            <span>TIER 1 · DIRECT IMPACT SERVICES (IMMEDIATE BREAKERS)</span>
+            <span>TIER 1 · DIRECT IMPACT SERVICES ({scenario.riskLevel.includes('LOW') ? 'CONTAINED INTEGRATION' : 'DIRECT BREAKERS'})</span>
           </div>
 
           <div className="tier-services-grid">
             {scenario.affectedServices
               .filter((s) => s.dependencyType === 'Direct dependency')
               .map((svc) => (
-                <div key={svc.id} className="tier-service-card panel tier-card-risk">
-                  <div className="tier-service-header">
-                    <div>
-                      <span className="badge badge-risk mono text-xs">HIGH RISK</span>
-                      <h4 className="font-semibold text-white text-sm" style={{ marginTop: 4 }}>
-                        {svc.name}
-                      </h4>
-                    </div>
-                    <span className="mono text-muted text-xs">{svc.dependentCallers} req/s</span>
-                  </div>
-
-                  <p className="tier-failure-text text-secondary text-xs">
-                    {svc.impactReason}
-                  </p>
-
-                  <div className="tier-service-footer mono text-xs text-muted">
-                    <span>Component: {svc.component}</span>
-                  </div>
-                </div>
-              ))}
-          </div>
-        </div>
-
-        {/* Downward Propagation Vector */}
-        <div className="propagation-vector-arrow">
-          <div className="vector-line" />
-          <div className="vector-badge mono text-xs">
-            <ArrowDown size={12} />
-            <span>INDIRECT & CASCADING IMPACT (2-HOPS)</span>
-          </div>
-          <div className="vector-line" />
-        </div>
-
-        {/* TIER 2: INDIRECT IMPACT */}
-        <div className="blast-tier-block">
-          <div className="tier-badge-label mono text-xs">
-            <span>TIER 2 · DOWNSTREAM CONSUMERS & BUFFERS</span>
-          </div>
-
-          <div className="tier-services-grid">
-            {scenario.affectedServices
-              .filter((s) => s.dependencyType === 'Indirect dependency')
-              .map((svc) => (
                 <div
                   key={svc.id}
                   className={`tier-service-card panel ${
-                    svc.risk === 'MEDIUM' ? 'tier-card-warning' : 'tier-card-neutral'
+                    svc.risk === 'HIGH'
+                      ? 'tier-card-risk'
+                      : svc.risk === 'MEDIUM'
+                      ? 'tier-card-warning'
+                      : 'tier-card-neutral'
                   }`}
                 >
                   <div className="tier-service-header">
                     <div>
                       <span
                         className={`badge ${
-                          svc.risk === 'MEDIUM' ? 'badge-warning' : 'badge-healthy'
+                          svc.risk === 'HIGH'
+                            ? 'badge-risk'
+                            : svc.risk === 'MEDIUM'
+                            ? 'badge-warning'
+                            : 'badge-healthy'
                         } mono text-xs`}
                       >
                         {svc.risk} RISK
@@ -221,6 +211,76 @@ export const BlastRadiusView: React.FC<BlastRadiusViewProps> = ({
                 </div>
               ))}
           </div>
+        </div>
+
+        {/* Downward Propagation Vector */}
+        <div className="propagation-vector-arrow">
+          <div className="vector-line" />
+          <div className="vector-badge mono text-xs">
+            <ArrowDown size={12} />
+            <span>
+              {scenario.affectedServices.some((s) => s.dependencyType === 'Indirect dependency')
+                ? 'INDIRECT DEPENDENCY BLAST RADIUS (2-HOPS)'
+                : 'INDIRECT BLAST PROPAGATION TERMINATED'}
+            </span>
+          </div>
+          <div className="vector-line" />
+        </div>
+
+        {/* TIER 2: INDIRECT IMPACT */}
+        <div className="blast-tier-block">
+          <div className="tier-badge-label mono text-xs">
+            <span>TIER 2 · DOWNSTREAM CONSUMERS & BUFFERS</span>
+          </div>
+
+          {scenario.affectedServices.filter((s) => s.dependencyType === 'Indirect dependency').length === 0 ? (
+            <div className="panel" style={{ padding: '18px 20px', borderLeft: '3px solid var(--status-healthy)' }}>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 size={16} className="text-healthy" />
+                <h4 className="font-semibold text-white text-sm">No Indirect Downstream Propagation</h4>
+              </div>
+              <p className="text-secondary text-xs" style={{ marginTop: 6, lineHeight: 1.5 }}>
+                Change blast radius terminates at Tier 1 direct integration. 0 indirect downstream services or asynchronous worker queues are impacted.
+              </p>
+            </div>
+          ) : (
+            <div className="tier-services-grid">
+              {scenario.affectedServices
+                .filter((s) => s.dependencyType === 'Indirect dependency')
+                .map((svc) => (
+                  <div
+                    key={svc.id}
+                    className={`tier-service-card panel ${
+                      svc.risk === 'MEDIUM' ? 'tier-card-warning' : 'tier-card-neutral'
+                    }`}
+                  >
+                    <div className="tier-service-header">
+                      <div>
+                        <span
+                          className={`badge ${
+                            svc.risk === 'MEDIUM' ? 'badge-warning' : 'badge-healthy'
+                          } mono text-xs`}
+                        >
+                          {svc.risk} RISK
+                        </span>
+                        <h4 className="font-semibold text-white text-sm" style={{ marginTop: 4 }}>
+                          {svc.name}
+                        </h4>
+                      </div>
+                      <span className="mono text-muted text-xs">{svc.dependentCallers} req/s</span>
+                    </div>
+
+                    <p className="tier-failure-text text-secondary text-xs">
+                      {svc.impactReason}
+                    </p>
+
+                    <div className="tier-service-footer mono text-xs text-muted">
+                      <span>Component: {svc.component}</span>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
         </div>
       </div>
 

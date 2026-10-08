@@ -58,6 +58,14 @@ export interface Recommendation {
   status: 'REQUIRED' | 'RECOMMENDED' | 'INFORMATIONAL'
 }
 
+export interface ScenarioRiskFactors {
+  affectedServicesText: string
+  conflictsText: string
+  pathsText: string
+  footprintText: string
+  justificationText: string
+}
+
 export interface ChangeScenario {
   id: string
   resource: string
@@ -73,4 +81,6 @@ export interface ChangeScenario {
   affectedServices: AffectedService[]
   configConflicts: ConfigConflict[]
   recommendations: Recommendation[]
+  whyRiskExplanation?: string
+  riskFactors?: ScenarioRiskFactors
 }

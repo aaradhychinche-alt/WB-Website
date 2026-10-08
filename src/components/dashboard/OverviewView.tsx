@@ -436,7 +436,11 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               </div>
 
               <span className="mono text-xs text-muted">
-                Decision: Block deployment pending driver upgrade
+                {analysisResult.risk === 'LOW'
+                  ? 'Decision: Approved for deployment via canary rollout'
+                  : analysisResult.risk === 'MEDIUM'
+                  ? 'Decision: Validate in staging before production cutover'
+                  : 'Decision: Block deployment pending driver upgrade'}
               </span>
             </div>
           </div>
